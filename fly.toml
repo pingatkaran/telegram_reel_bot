@@ -1,0 +1,28 @@
+app = "telegram-reel-bot"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  STORAGE_PROVIDER = "cloudflare_r2"
+  GRAPH_API_VERSION = "v24.0"
+  WHISPER_MODEL = "tiny"
+  MIN_REEL_SECONDS = "15"
+  MAX_REEL_SECONDS = "45"
+  PROMPT_REEL_SECONDS = "25"
+  MAX_CONCURRENT_JOBS = "1"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1

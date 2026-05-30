@@ -1,0 +1,53 @@
+services:
+  - type: web
+    name: telegram-reel-bot
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        generateValue: true
+      - key: INSTAGRAM_ACCESS_TOKEN
+        sync: false
+      - key: INSTAGRAM_USER_ID
+        sync: false
+      - key: GRAPH_API_VERSION
+        value: v24.0
+      - key: STORAGE_PROVIDER
+        value: cloudflare_r2
+      - key: CLOUDFLARE_R2_ACCESS_KEY_ID
+        sync: false
+      - key: CLOUDFLARE_R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: CLOUDFLARE_R2_BUCKET
+        sync: false
+      - key: CLOUDFLARE_R2_ENDPOINT
+        sync: false
+      - key: CLOUDFLARE_R2_PUBLIC_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: WHISPER_MODEL
+        value: tiny
+      - key: MIN_REEL_SECONDS
+        value: "15"
+      - key: MAX_REEL_SECONDS
+        value: "45"
+      - key: PROMPT_REEL_SECONDS
+        value: "25"
+      - key: MAX_CONCURRENT_JOBS
+        value: "1"
+      - key: MAX_DOWNLOAD_MB
+        value: "500"
