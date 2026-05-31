@@ -1,3 +1,9 @@
+---
+title: Telegram Reel Bot
+sdk: docker
+app_port: 7860
+---
+
 # Telegram to Instagram Reel Bot
 
 Cloud-deployable Telegram bot that turns a Telegram prompt, YouTube URL, direct video URL, or uploaded video into a vertical Instagram Reel and publishes it through the official Instagram Graph API.

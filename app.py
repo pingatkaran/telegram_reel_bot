@@ -63,6 +63,12 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.head("/")
+@app.head("/health")
+async def health_head() -> None:
+    return None
+
+
 @app.post(settings.webhook_path)
 async def telegram_webhook(request: Request, background_tasks: BackgroundTasks) -> dict[str, bool]:
     if settings.telegram_webhook_secret:
