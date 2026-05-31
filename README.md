@@ -106,6 +106,8 @@ MAX_REEL_SECONDS=45
 PROMPT_REEL_SECONDS=25
 MAX_DOWNLOAD_MB=500
 MAX_CONCURRENT_JOBS=1
+YOUTUBE_COOKIES_FILE=
+YOUTUBE_COOKIES_CONTENT=
 ```
 
 Webhook URL:
@@ -321,6 +323,35 @@ Official references:
 - [Render Docker](https://render.com/docs/docker)
 - [Render Blueprint spec](https://render.com/docs/blueprint-spec)
 
+## YouTube Cloud Blocking
+
+Some YouTube URLs fail on Render/Railway/Fly because YouTube challenges datacenter IP addresses with "Sign in to confirm you're not a bot." That is outside Telegram and Instagram.
+
+Best options:
+
+1. Upload the source video directly to Telegram.
+2. Send a direct `.mp4` URL instead of a YouTube watch URL.
+3. Upload the source MP4 to R2/Supabase yourself and send that public MP4 URL.
+4. Use a paid host/proxy setup with stable YouTube access.
+5. Advanced: provide a Netscape-format YouTube cookies file to yt-dlp.
+
+Cookie support is optional and fragile. Only use cookies from an account you control, and understand they are sensitive credentials.
+
+Supported cookie env vars:
+
+```env
+YOUTUBE_COOKIES_FILE=/etc/secrets/youtube_cookies.txt
+```
+
+or:
+
+```env
+YOUTUBE_COOKIES_CONTENT=# Netscape HTTP Cookie File
+...
+```
+
+`YOUTUBE_COOKIES_FILE` is preferred if your cloud host supports secret files. The cookies file must be in Netscape format. See the official [yt-dlp FAQ on cookies](https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp).
+
 ## 6. Deploy On Railway
 
 1. Create a new Railway project from GitHub.
@@ -453,5 +484,5 @@ The local webhook will not work unless you expose it through a public HTTPS URL.
 - Instagram says it cannot fetch the video: verify the public storage URL opens in an incognito browser and returns the MP4 directly.
 - Instagram token errors: check token scopes, expiry, app mode, Page link, and `INSTAGRAM_USER_ID`.
 - Render/Railway free tier runs out of memory: set `LOW_MEMORY_MODE=true`, `ENABLE_TRANSCRIPTION=false`, `MAX_DOWNLOAD_MB=150`, then redeploy. For Whisper transcription, use a host with at least 1-2 GB RAM.
-- YouTube downloads fail: the video may block cloud datacenter downloads or violate the site's access rules.
+- YouTube downloads fail: the video may block cloud datacenter downloads or require cookies. Upload the video directly, send a direct MP4 URL, or configure `YOUTUBE_COOKIES_FILE`.
 - Prompt-only Reel looks simple: this starter creates a clean text Reel with silent audio and generated captions; it does not generate AI video footage.

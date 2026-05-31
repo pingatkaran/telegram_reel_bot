@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     whisper_model: str = Field(default="tiny", alias="WHISPER_MODEL")
     enable_transcription: bool = Field(default=True, alias="ENABLE_TRANSCRIPTION")
     low_memory_mode: bool = Field(default=False, alias="LOW_MEMORY_MODE")
+    youtube_cookies_file: str | None = Field(default=None, alias="YOUTUBE_COOKIES_FILE")
+    youtube_cookies_content: str | None = Field(default=None, alias="YOUTUBE_COOKIES_CONTENT")
     min_reel_seconds: int = Field(default=15, alias="MIN_REEL_SECONDS")
     max_reel_seconds: int = Field(default=45, alias="MAX_REEL_SECONDS")
     prompt_reel_seconds: int = Field(default=25, alias="PROMPT_REEL_SECONDS")
