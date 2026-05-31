@@ -41,8 +41,14 @@ async def lifespan(_app: FastAPI):
     ensure_directories()
     database.init()
     if settings.telegram_bot_token and settings.webhook_url:
-        await telegram.set_webhook(settings.webhook_url, settings.telegram_webhook_secret)
-        logger.info("Telegram webhook set to %s", settings.webhook_url)
+        try:
+            await telegram.set_webhook(settings.webhook_url, settings.telegram_webhook_secret)
+            logger.info("Telegram webhook set to %s", settings.webhook_url)
+        except Exception:
+            logger.exception(
+                "Could not set Telegram webhook for %s. The app will keep running, but Telegram messages will not arrive until PUBLIC_BASE_URL is fixed.",
+                settings.webhook_url,
+            )
     elif not settings.public_base_url:
         logger.warning("PUBLIC_BASE_URL is not set; webhook will not be registered")
     yield
@@ -95,7 +101,12 @@ async def process_job(job_id: int, chat_id: int | str, payload: "InputPayload") 
             source_path, source_text, source_type, transcript_segments = await prepare_source(job_id, payload)
 
             info = await video_editor.probe(source_path)
-            if not transcript_segments and info.has_audio:
+            if (
+                settings.enable_transcription
+                and not settings.low_memory_mode
+                and not transcript_segments
+                and info.has_audio
+            ):
                 audio_path = OUTPUTS_DIR / f"{job_id}_audio.wav"
                 try:
                     await video_editor.extract_audio(source_path, audio_path)
@@ -114,6 +125,7 @@ async def process_job(job_id: int, chat_id: int | str, payload: "InputPayload") 
                 transcript_segments,
                 final_path,
                 fallback_subtitle=fallback_subtitle,
+                low_memory=settings.low_memory_mode,
             )
 
             caption_result = await caption_generator.generate(source_text, transcript_for_caption, source_type)

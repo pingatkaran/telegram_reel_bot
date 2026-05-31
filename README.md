@@ -60,6 +60,8 @@ telegram_reel_bot/
 
 Copy `.env.example` into your cloud provider environment settings and fill the values there.
 
+Your Telegram token has already been placed in the local `.env` file for reference, but `.env` is ignored by Git and should not be uploaded. In Render, Railway, Fly.io, or Cloud Run, paste the same value into the provider's environment variable UI as `TELEGRAM_BOT_TOKEN`.
+
 Required:
 
 ```env
@@ -97,6 +99,8 @@ OPENAI_MODEL=gpt-4o-mini
 TELEGRAM_WEBHOOK_SECRET=
 GRAPH_API_VERSION=v24.0
 WHISPER_MODEL=tiny
+ENABLE_TRANSCRIPTION=true
+LOW_MEMORY_MODE=false
 MIN_REEL_SECONDS=15
 MAX_REEL_SECONDS=45
 PROMPT_REEL_SECONDS=25
@@ -155,6 +159,41 @@ Official references:
 - [Instagram Content Publishing](https://developers.facebook.com/docs/instagram-platform/content-publishing/)
 - [IG User Media endpoint](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media)
 
+### Instagram Token Checklist
+
+You need these two values:
+
+```env
+INSTAGRAM_ACCESS_TOKEN=
+INSTAGRAM_USER_ID=
+```
+
+Get them like this:
+
+1. Go to [Meta for Developers](https://developers.facebook.com/).
+2. Create an app or open your existing app.
+3. Add Instagram Graph API / Instagram access in the app dashboard.
+4. Make sure your Instagram account is Creator or Business.
+5. Make sure it is linked to a Facebook Page.
+6. Generate a User access token with publishing permissions.
+7. Use the token to list your Facebook Pages:
+
+```http
+GET https://graph.facebook.com/v24.0/me/accounts?access_token=YOUR_TOKEN
+```
+
+8. Copy the Page id.
+9. Use that Page id to get the linked Instagram account:
+
+```http
+GET https://graph.facebook.com/v24.0/PAGE_ID?fields=instagram_business_account&access_token=YOUR_TOKEN
+```
+
+10. Use the returned Instagram account id as `INSTAGRAM_USER_ID`.
+11. Use the token as `INSTAGRAM_ACCESS_TOKEN`.
+
+For first deployment, test with your own account while the Meta app is in development mode. For publishing to accounts outside your app roles, Meta App Review is required.
+
 ## 3. Set Up Public Video Storage
 
 ### Option A: Cloudflare R2
@@ -169,6 +208,40 @@ Official references:
 
 Official reference: [Cloudflare R2 public buckets](https://developers.cloudflare.com/r2/buckets/public-buckets/).
 
+### Cloudflare R2 Token Checklist
+
+Use this if `STORAGE_PROVIDER=cloudflare_r2`.
+
+You need:
+
+```env
+CLOUDFLARE_R2_ACCESS_KEY_ID=
+CLOUDFLARE_R2_SECRET_ACCESS_KEY=
+CLOUDFLARE_R2_BUCKET=
+CLOUDFLARE_R2_ENDPOINT=
+CLOUDFLARE_R2_PUBLIC_URL=
+```
+
+Steps:
+
+1. Open Cloudflare Dashboard.
+2. Go to **R2 Object Storage**.
+3. Create a bucket, for example `telegram-reels`.
+4. Go to **Manage R2 API Tokens**.
+5. Create an API token with Object Read & Write access for that bucket.
+6. Copy the Access Key ID into `CLOUDFLARE_R2_ACCESS_KEY_ID`.
+7. Copy the Secret Access Key into `CLOUDFLARE_R2_SECRET_ACCESS_KEY`.
+8. Set `CLOUDFLARE_R2_BUCKET` to the bucket name.
+9. Set `CLOUDFLARE_R2_ENDPOINT` to:
+
+```text
+https://<account-id>.r2.cloudflarestorage.com
+```
+
+10. Enable public access for the bucket using a custom domain or `r2.dev`.
+11. Set `CLOUDFLARE_R2_PUBLIC_URL` to that public bucket URL.
+12. Confirm the URL is public by opening an uploaded file in an incognito browser.
+
 ### Option B: Supabase Storage
 
 1. Create a Supabase project.
@@ -177,6 +250,29 @@ Official reference: [Cloudflare R2 public buckets](https://developers.cloudflare
 4. Copy your project URL, service role key, and bucket name into the Supabase environment variables.
 
 Official reference: [Supabase Python storage upload](https://supabase.com/docs/reference/python/storage-from-upload).
+
+### Supabase Token Checklist
+
+Use this if `STORAGE_PROVIDER=supabase`.
+
+You need:
+
+```env
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_BUCKET=
+```
+
+Steps:
+
+1. Open your Supabase project.
+2. Go to **Project Settings -> API**.
+3. Copy the Project URL into `SUPABASE_URL`.
+4. Copy the service role key into `SUPABASE_SERVICE_ROLE_KEY`.
+5. Go to **Storage**.
+6. Create a bucket, for example `reels`.
+7. Make the bucket public.
+8. Set `SUPABASE_BUCKET` to the bucket name.
 
 ## 4. Push To GitHub Without Running Locally
 
@@ -207,6 +303,17 @@ Render notes:
 
 - The service must bind to `$PORT`; the Docker command already does this.
 - Free instances may sleep, so the first Telegram request after sleep can be slow.
+- Render Free has 512 MB RAM. Keep these values on the free plan:
+
+```env
+LOW_MEMORY_MODE=true
+ENABLE_TRANSCRIPTION=false
+MAX_DOWNLOAD_MB=150
+WHISPER_MODEL=tiny
+MAX_CONCURRENT_JOBS=1
+```
+
+With these settings, the bot avoids local Whisper transcription and uses a lighter FFmpeg vertical render. If you upgrade to 1-2 GB RAM, you can set `ENABLE_TRANSCRIPTION=true` and `LOW_MEMORY_MODE=false` for transcript-based segment selection and blurred backgrounds.
 
 Official references:
 
@@ -345,7 +452,6 @@ The local webhook will not work unless you expose it through a public HTTPS URL.
 - Telegram says nothing happens: check `PUBLIC_BASE_URL`, redeploy, and verify `/health` opens in a browser.
 - Instagram says it cannot fetch the video: verify the public storage URL opens in an incognito browser and returns the MP4 directly.
 - Instagram token errors: check token scopes, expiry, app mode, Page link, and `INSTAGRAM_USER_ID`.
-- Render/Railway free tier times out: use a shorter input video, `WHISPER_MODEL=tiny`, or a paid/small instance.
+- Render/Railway free tier runs out of memory: set `LOW_MEMORY_MODE=true`, `ENABLE_TRANSCRIPTION=false`, `MAX_DOWNLOAD_MB=150`, then redeploy. For Whisper transcription, use a host with at least 1-2 GB RAM.
 - YouTube downloads fail: the video may block cloud datacenter downloads or violate the site's access rules.
 - Prompt-only Reel looks simple: this starter creates a clean text Reel with silent audio and generated captions; it does not generate AI video footage.
-

@@ -125,6 +125,7 @@ class VideoEditor:
         transcript: list[TranscriptSegment],
         output_path: Path,
         fallback_subtitle: str | None = None,
+        low_memory: bool = False,
     ) -> Path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         info = await self.probe(input_path)
@@ -137,14 +138,22 @@ class VideoEditor:
             text = fallback_subtitle or "Highlights from this video"
             write_srt(prompt_to_segments(text, min(int(duration), 12)), subtitle_path, 0.0, duration)
 
-        vf = (
-            "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
-            "crop=1080:1920,boxblur=luma_radius=24:luma_power=1[bg];"
-            "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg];"
-            "[bg][fg]overlay=(W-w)/2:(H-h)/2,"
-            f"{subtitles_filter(subtitle_path, self.subtitle_style)},"
-            "format=yuv420p[v]"
-        )
+        if low_memory:
+            vf = (
+                "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,"
+                "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black,"
+                f"{subtitles_filter(subtitle_path, self.subtitle_style)},"
+                "format=yuv420p[v]"
+            )
+        else:
+            vf = (
+                "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
+                "crop=1080:1920,boxblur=luma_radius=24:luma_power=1[bg];"
+                "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg];"
+                "[bg][fg]overlay=(W-w)/2:(H-h)/2,"
+                f"{subtitles_filter(subtitle_path, self.subtitle_style)},"
+                "format=yuv420p[v]"
+            )
 
         cmd = [
             "ffmpeg",
@@ -158,6 +167,14 @@ class VideoEditor:
         ]
         if not info.has_audio:
             cmd.extend(["-f", "lavfi", "-t", f"{duration:.3f}", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"])
+
+        if low_memory:
+            cmd.extend(["-threads", "1", "-filter_threads", "1", "-filter_complex_threads", "1"])
+
+        preset = "ultrafast" if low_memory else "veryfast"
+        video_bitrate = "3000k" if low_memory else "4500k"
+        maxrate = "4500k" if low_memory else "6000k"
+        bufsize = "9000k" if low_memory else "12000k"
 
         cmd.extend(
             [
@@ -178,17 +195,17 @@ class VideoEditor:
                 "-c:v",
                 "libx264",
                 "-preset",
-                "veryfast",
+                preset,
                 "-profile:v",
                 "high",
                 "-level",
                 "4.1",
                 "-b:v",
-                "4500k",
+                video_bitrate,
                 "-maxrate",
-                "6000k",
+                maxrate,
                 "-bufsize",
-                "12000k",
+                bufsize,
                 "-c:a",
                 "aac",
                 "-b:a",
