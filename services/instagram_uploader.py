@@ -21,7 +21,17 @@ class InstagramPublishResult:
 class InstagramUploader:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.base_url = f"https://graph.facebook.com/{settings.graph_api_version}"
+        self.base_url = f"https://{self._graph_host()}/{settings.graph_api_version}"
+
+    def _graph_host(self) -> str:
+        if self.settings.instagram_api_host == "facebook":
+            return "graph.facebook.com"
+        if self.settings.instagram_api_host == "instagram":
+            return "graph.instagram.com"
+        token = self.settings.instagram_access_token or ""
+        if token.startswith("IG"):
+            return "graph.instagram.com"
+        return "graph.facebook.com"
 
     async def publish_reel(self, video_url: str, caption: str) -> InstagramPublishResult:
         if not self.settings.instagram_access_token or not self.settings.instagram_user_id:
@@ -66,7 +76,7 @@ class InstagramUploader:
             if status_code == "FINISHED":
                 return
             if status_code in {"ERROR", "EXPIRED"}:
-                raise RuntimeError(f"Instagram container failed: {payload}")
+                raise RuntimeError(f"Instagram container failed on {self.base_url}: {payload}")
             logger.info("Instagram container %s not ready yet: %s", creation_id, status or status_code)
             await asyncio.sleep(10 if attempt > 5 else 4)
         raise RuntimeError("Instagram container did not finish processing in time")

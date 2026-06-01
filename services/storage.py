@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import boto3
+import httpx
 from supabase import create_client
 
 from config import Settings
@@ -16,6 +17,17 @@ from config import Settings
 class StorageClient:
     async def upload_public(self, file_path: Path) -> str:
         raise NotImplementedError
+
+    async def verify_public_url(self, url: str) -> None:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+            response = await client.head(url)
+            if response.status_code == 405:
+                response = await client.get(url, headers={"Range": "bytes=0-1"})
+        content_type = response.headers.get("content-type", "")
+        if response.status_code >= 400:
+            raise RuntimeError(f"Public storage URL is not accessible: HTTP {response.status_code} for {url}")
+        if "video/" not in content_type and "application/octet-stream" not in content_type:
+            raise RuntimeError(f"Public storage URL does not look like a video: content-type={content_type!r} for {url}")
 
 
 class CloudflareR2Storage(StorageClient):
@@ -52,7 +64,9 @@ class CloudflareR2Storage(StorageClient):
                 "CacheControl": "public, max-age=31536000",
             },
         )
-        return f"{self.settings.cloudflare_r2_public_url.rstrip('/')}/{quote(key)}"
+        public_url = f"{self.settings.cloudflare_r2_public_url.rstrip('/')}/{quote(key)}"
+        await self.verify_public_url(public_url)
+        return public_url
 
 
 class SupabaseStorage(StorageClient):
@@ -73,7 +87,9 @@ class SupabaseStorage(StorageClient):
         content_type = mimetypes.guess_type(file_path.name)[0] or "video/mp4"
         await asyncio.to_thread(self._upload_sync, file_path, key, content_type)
         public_url = self.client.storage.from_(self.settings.supabase_bucket).get_public_url(key)
-        return str(public_url)
+        public_url = str(public_url)
+        await self.verify_public_url(public_url)
+        return public_url
 
     def _upload_sync(self, file_path: Path, key: str, content_type: str) -> None:
         with file_path.open("rb") as file:

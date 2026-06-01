@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     instagram_access_token: str | None = Field(default=None, alias="INSTAGRAM_ACCESS_TOKEN")
     instagram_user_id: str | None = Field(default=None, alias="INSTAGRAM_USER_ID")
     graph_api_version: str = Field(default="v24.0", alias="GRAPH_API_VERSION")
+    instagram_api_host: Literal["auto", "facebook", "instagram"] = Field(
+        default="auto",
+        alias="INSTAGRAM_API_HOST",
+    )
 
     storage_provider: Literal["cloudflare_r2", "supabase"] = Field(
         default="cloudflare_r2",

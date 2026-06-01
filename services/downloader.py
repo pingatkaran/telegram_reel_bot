@@ -29,45 +29,106 @@ class Downloader:
     def _download_youtube(self, url: str, job_id: int) -> Path:
         DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
         output_template = str(DOWNLOADS_DIR / f"{job_id}_%(id)s.%(ext)s")
-        options = {
-            "format": "bv*[height<=1080]+ba/b[height<=1080]/b",
+        base_options = {
             "outtmpl": output_template,
             "merge_output_format": "mp4",
             "noplaylist": True,
             "quiet": True,
             "no_warnings": True,
-            "socket_timeout": 30,
-            "retries": 3,
-            "max_filesize": self.settings.max_download_bytes,
+            "socket_timeout": 60,
+            "source_address": "0.0.0.0",
+            "retries": 10,
+            "extractor_retries": 5,
+            "fragment_retries": 10,
+            "file_access_retries": 5,
+            "sleep_interval_requests": 1,
+            "http_headers": {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/125.0.0.0 Safari/537.36"
+                ),
+                "Accept-Language": "en-US,en;q=0.9",
+            },
         }
         cookie_file = self._youtube_cookie_file()
-        if cookie_file:
-            options["cookiefile"] = str(cookie_file)
-        try:
-            with YoutubeDL(options) as ydl:
-                info = ydl.extract_info(url, download=True)
-                requested = info.get("requested_downloads") or []
-                for item in requested:
-                    filepath = item.get("filepath")
-                    if filepath and Path(filepath).exists():
-                        return Path(filepath)
-                prepared = Path(ydl.prepare_filename(info))
-                if prepared.exists():
-                    return prepared
-                candidates = sorted(DOWNLOADS_DIR.glob(f"{job_id}_*"), key=lambda path: path.stat().st_mtime, reverse=True)
-                for candidate in candidates:
-                    if candidate.suffix.lower() in VIDEO_EXTENSIONS and candidate.exists():
-                        return candidate
-        except Exception as exc:
-            message = str(exc)
-            if "Sign in to confirm" in message or "not a bot" in message or "--cookies" in message:
-                raise RuntimeError(
-                    "YouTube blocked this cloud server with a bot-verification challenge. "
-                    "Try uploading the video directly to Telegram, send a direct MP4 URL, "
-                    "or configure YOUTUBE_COOKIES_FILE/YOUTUBE_COOKIES_CONTENT in Render."
-                ) from exc
-            raise
+
+        format_attempts = [
+            ("bestvideo*[height<=1080]+bestaudio/best[height<=1080]/best", ["web", "android"]),
+            ("best[height<=1080]/best", ["web"]),
+            ("bestvideo*+bestaudio/best", ["android", "web"]),
+            ("worst[ext=mp4]/worst/best", ["web"]),
+        ]
+
+        last_error: Exception | None = None
+        for format_selector, player_clients in format_attempts:
+            options = {
+                **base_options,
+                "format": format_selector,
+                "extractor_args": {"youtube": {"player_client": player_clients}},
+            }
+            if cookie_file:
+                options["cookiefile"] = str(cookie_file)
+
+            try:
+                with YoutubeDL(options) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    downloaded = self._find_youtube_download(ydl, info, job_id)
+                    if downloaded.stat().st_size > self.settings.max_download_bytes:
+                        raise RuntimeError(f"Video exceeds MAX_DOWNLOAD_MB={self.settings.max_download_mb}")
+                    return downloaded
+            except Exception as exc:
+                last_error = exc
+                if "Requested format is not available" in str(exc):
+                    continue
+                self._raise_youtube_error(exc)
+
+        if last_error:
+            self._raise_youtube_error(last_error)
         raise RuntimeError("yt-dlp finished but no downloaded video file was found")
+
+    def _find_youtube_download(self, ydl: YoutubeDL, info: dict, job_id: int) -> Path:
+        requested = info.get("requested_downloads") or []
+        for item in requested:
+            filepath = item.get("filepath")
+            if filepath and Path(filepath).exists():
+                return Path(filepath)
+
+        prepared = Path(ydl.prepare_filename(info))
+        if prepared.exists():
+            return prepared
+
+        candidates = sorted(
+            DOWNLOADS_DIR.glob(f"{job_id}_*"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        for candidate in candidates:
+            if candidate.suffix.lower() in VIDEO_EXTENSIONS and candidate.exists():
+                return candidate
+        raise RuntimeError("yt-dlp finished but no downloaded video file was found")
+
+    def _raise_youtube_error(self, exc: Exception) -> None:
+        message = str(exc)
+        if "Sign in to confirm" in message or "not a bot" in message or "--cookies" in message:
+            raise RuntimeError(
+                "YouTube blocked this cloud server with a bot-verification challenge. "
+                "Try uploading the video directly to Telegram, send a direct MP4 URL, "
+                "or configure YOUTUBE_COOKIES_FILE/YOUTUBE_COOKIES_CONTENT."
+            ) from exc
+        if "UNEXPECTED_EOF_WHILE_READING" in message or "SSLError" in message:
+            raise RuntimeError(
+                "YouTube connection failed from this cloud host while downloading video metadata. "
+                "Cookies are present, but YouTube/Hugging Face had a TLS/network failure. "
+                "Retry once; if it repeats, upload the video directly to Telegram or send a direct MP4 URL."
+            ) from exc
+        if "Requested format is not available" in message:
+            raise RuntimeError(
+                "YouTube was accessible, but no downloadable format matched any fallback selector. "
+                "This is common for restricted, livestream, members-only, Shorts-only, or cloud-blocked videos. "
+                "Try another YouTube URL, upload the video directly to Telegram, or send a direct MP4 URL."
+            ) from exc
+        raise exc
 
     def _youtube_cookie_file(self) -> Path | None:
         if self.settings.youtube_cookies_file:

@@ -85,7 +85,7 @@ CLOUDFLARE_R2_ACCESS_KEY_ID=
 CLOUDFLARE_R2_SECRET_ACCESS_KEY=
 CLOUDFLARE_R2_BUCKET=
 CLOUDFLARE_R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
-CLOUDFLARE_R2_PUBLIC_URL=https://<public-bucket-domain-or-r2-dev-url>
+CLOUDFLARE_R2_PUBLIC_URL=https://<public-bucket-domain-or-r2-dev-url>/<optional-bucket-prefix>
 ```
 
 Supabase Storage:
@@ -104,6 +104,7 @@ OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
 TELEGRAM_WEBHOOK_SECRET=
 GRAPH_API_VERSION=v24.0
+INSTAGRAM_API_HOST=auto
 WHISPER_MODEL=tiny
 ENABLE_TRANSCRIPTION=true
 LOW_MEMORY_MODE=false
@@ -154,6 +155,12 @@ GET https://graph.facebook.com/v24.0/PAGE_ID?fields=instagram_business_account&a
 
 8. Put the returned Instagram account id into `INSTAGRAM_USER_ID`.
 9. Put the access token into `INSTAGRAM_ACCESS_TOKEN`.
+
+Token host note:
+
+- Tokens that start with `EAA...` usually use the Instagram API with Facebook Login through `graph.facebook.com`.
+- Tokens that start with `IG...` usually use the Instagram API with Instagram Login through `graph.instagram.com`.
+- Leave `INSTAGRAM_API_HOST=auto` and the app will choose from the token prefix. To force one, set `INSTAGRAM_API_HOST=facebook` or `INSTAGRAM_API_HOST=instagram`.
 
 Long-lived token notes:
 
@@ -247,7 +254,7 @@ https://<account-id>.r2.cloudflarestorage.com
 ```
 
 10. Enable public access for the bucket using a custom domain or `r2.dev`.
-11. Set `CLOUDFLARE_R2_PUBLIC_URL` to that public bucket URL.
+11. Set `CLOUDFLARE_R2_PUBLIC_URL` to that public bucket URL. If your public object URLs include the bucket name, include it as a path prefix, for example `https://pub-xxxxx.r2.dev/telegram-reels`.
 12. Confirm the URL is public by opening an uploaded file in an incognito browser.
 
 ### Option B: Supabase Storage

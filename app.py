@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 
 from config import DOWNLOADS_DIR, OUTPUTS_DIR, Settings, ensure_directories, get_settings
 from services.caption_generator import CaptionGenerator
@@ -41,20 +41,35 @@ async def lifespan(_app: FastAPI):
     ensure_directories()
     database.init()
     if settings.telegram_bot_token and settings.webhook_url:
-        try:
-            await telegram.set_webhook(settings.webhook_url, settings.telegram_webhook_secret)
-            logger.info("Telegram webhook set to %s", settings.webhook_url)
-        except Exception:
-            logger.exception(
-                "Could not set Telegram webhook for %s. The app will keep running, but Telegram messages will not arrive until PUBLIC_BASE_URL is fixed.",
-                settings.webhook_url,
-            )
+        asyncio.create_task(configure_telegram_webhook())
     elif not settings.public_base_url:
         logger.warning("PUBLIC_BASE_URL is not set; webhook will not be registered")
     yield
 
 
 app = FastAPI(title="Telegram to Instagram Reel Bot", version="1.0.0", lifespan=lifespan)
+
+
+async def configure_telegram_webhook() -> None:
+    if not settings.webhook_url:
+        return
+
+    delays = [0, 5, 15, 30, 60, 120]
+    for attempt, delay in enumerate(delays, start=1):
+        if delay:
+            await asyncio.sleep(delay)
+        try:
+            await telegram.set_webhook(settings.webhook_url, settings.telegram_webhook_secret)
+            logger.info("Telegram webhook set to %s", settings.webhook_url)
+            return
+        except Exception:
+            logger.exception(
+                "Could not set Telegram webhook for %s on attempt %s/%s. Retrying if attempts remain.",
+                settings.webhook_url,
+                attempt,
+                len(delays),
+            )
+    logger.error("Telegram webhook could not be set after retries: %s", settings.webhook_url)
 
 
 @app.get("/")
@@ -70,7 +85,7 @@ async def health_head() -> None:
 
 
 @app.post(settings.webhook_path)
-async def telegram_webhook(request: Request, background_tasks: BackgroundTasks) -> dict[str, bool]:
+async def telegram_webhook(request: Request) -> dict[str, object]:
     if settings.telegram_webhook_secret:
         received = request.headers.get("x-telegram-bot-api-secret-token")
         if received != settings.telegram_webhook_secret:
@@ -84,23 +99,42 @@ async def telegram_webhook(request: Request, background_tasks: BackgroundTasks) 
 
     chat_id, payload = parsed
     if payload.command == "start":
-        await telegram.send_message(chat_id, welcome_message())
-        return {"ok": True}
+        return telegram_reply(chat_id, welcome_message())
 
     if payload.input_type == "unsupported":
-        await telegram.send_message(chat_id, "Send a prompt, YouTube URL, direct video URL, or upload a video file.")
-        return {"ok": True}
+        return telegram_reply(chat_id, "Send a prompt, YouTube URL, direct video URL, or upload a video file.")
 
     job_id = database.create_job(update_id, chat_id, payload.input_type, payload.source_label)
     if job_id is None:
         return {"ok": True}
 
-    await telegram.send_message(chat_id, f"Got it. Job #{job_id} is queued and I will publish the Reel when it is ready.")
-    background_tasks.add_task(process_job, job_id, chat_id, payload)
-    return {"ok": True}
+    asyncio.create_task(process_job(job_id, chat_id, payload, send_queued=False))
+    return telegram_reply(chat_id, f"Got it. Job #{job_id} is queued and I will publish the Reel when it is ready.")
 
 
-async def process_job(job_id: int, chat_id: int | str, payload: "InputPayload") -> None:
+def telegram_reply(chat_id: int | str, text: str) -> dict[str, object]:
+    return {
+        "method": "sendMessage",
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": True,
+    }
+
+
+async def process_job(
+    job_id: int,
+    chat_id: int | str,
+    payload: "InputPayload",
+    send_queued: bool = True,
+) -> None:
+    if send_queued:
+        await safe_send_message(
+            chat_id,
+            f"Got it. Job #{job_id} is queued and I will publish the Reel when it is ready.",
+            f"queued message for job {job_id}",
+        )
+
+    public_url: str | None = None
     async with job_semaphore:
         try:
             database.update_job(job_id, status="processing")
@@ -137,6 +171,7 @@ async def process_job(job_id: int, chat_id: int | str, payload: "InputPayload") 
             caption_result = await caption_generator.generate(source_text, transcript_for_caption, source_type)
             storage = create_storage(settings)
             public_url = await storage.upload_public(final_path)
+            database.update_job(job_id, public_url=public_url)
             instagram = InstagramUploader(settings)
             publish_result = await instagram.publish_reel(public_url, caption_result.full_text)
 
@@ -156,13 +191,34 @@ async def process_job(job_id: int, chat_id: int | str, payload: "InputPayload") 
             ]
             if publish_result.permalink:
                 message.append(f"Instagram link: {publish_result.permalink}")
-            await telegram.send_message(chat_id, "\n".join(message))
+            await safe_send_message(chat_id, "\n".join(message), f"success message for job {job_id}")
         except Exception as exc:
             logger.exception("Job %s failed", job_id)
             database.update_job(job_id, status="failed", error=str(exc))
-            await telegram.send_message(
-                chat_id,
-                f"Job #{job_id} failed:\n{short_error(exc)}\n\nCheck your storage, Instagram token, and whether the source video is publicly downloadable.",
+            message = [
+                f"Job #{job_id} failed:",
+                short_error(exc),
+            ]
+            if public_url:
+                message.append(f"Public video URL created before failure: {public_url}")
+            message.append("Check your storage, Instagram token, and whether the source video is publicly downloadable.")
+            await safe_send_message(chat_id, "\n\n".join(message), f"failure message for job {job_id}")
+
+
+async def safe_send_message(chat_id: int | str, text: str, label: str) -> None:
+    delays = [0, 5, 15, 30, 60, 120]
+    for attempt, delay in enumerate(delays, start=1):
+        if delay:
+            await asyncio.sleep(delay)
+        try:
+            await telegram.send_message(chat_id, text)
+            return
+        except Exception:
+            logger.exception(
+                "Could not send Telegram %s on attempt %s/%s",
+                label,
+                attempt,
+                len(delays),
             )
 
 
