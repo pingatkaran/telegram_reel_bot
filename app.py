@@ -160,7 +160,8 @@ async def process_job(
 
             selected = scene_selector.pick(transcript_segments, info.duration)
             transcript_for_caption = transcript_text(transcript_segments)
-            fallback_subtitle = source_text or transcript_for_caption or "Highlights from this video"
+            add_subtitles = source_type != "prompt"
+            fallback_subtitle = None if not add_subtitles else source_text or transcript_for_caption or "Highlights from this video"
 
             final_path = OUTPUTS_DIR / f"{job_id}_reel.mp4"
             await video_editor.create_vertical_reel(
@@ -170,6 +171,7 @@ async def process_job(
                 final_path,
                 fallback_subtitle=fallback_subtitle,
                 low_memory=settings.low_memory_mode,
+                add_subtitles=add_subtitles,
             )
 
             caption_result = await caption_generator.generate(source_text, transcript_for_caption, source_type)
@@ -248,7 +250,7 @@ async def prepare_source(
         prompt_video_path = OUTPUTS_DIR / f"{job_id}_prompt.mp4"
         duration = max(settings.min_reel_seconds, min(settings.prompt_reel_seconds, settings.max_reel_seconds))
         reference_image_path = await download_reference_image(job_id, payload)
-        if settings.gemini_api_key and settings.enable_ai_prompt_visuals:
+        if settings.enable_ai_prompt_visuals:
             try:
                 image_paths = await visual_generator.generate_prompt_images(
                     payload.text,
@@ -261,13 +263,13 @@ async def prepare_source(
                         image_paths,
                         prompt_video_path,
                         duration,
-                        payload.text,
+                        subtitle_text=None,
                         low_memory=settings.low_memory_mode,
                     )
                     return prompt_video_path, payload.text, "prompt", prompt_to_segments(payload.text, duration)
-                logger.warning("Nano Banana did not return images for job %s; using text fallback", job_id)
+                logger.warning("AI prompt visuals did not return images for job %s; using text fallback", job_id)
             except Exception:
-                logger.exception("Nano Banana prompt visuals failed for job %s; using text fallback", job_id)
+                logger.exception("AI prompt visuals failed for job %s; using text fallback", job_id)
 
         await video_editor.create_prompt_video(payload.text, prompt_video_path, duration)
         return prompt_video_path, payload.text, "prompt", prompt_to_segments(payload.text, duration)

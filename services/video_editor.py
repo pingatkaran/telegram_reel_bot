@@ -123,7 +123,7 @@ class VideoEditor:
         image_paths: list[Path],
         output_path: Path,
         duration: int,
-        subtitle_text: str,
+        subtitle_text: str | None = None,
         low_memory: bool = False,
     ) -> Path:
         if not image_paths:
@@ -131,7 +131,8 @@ class VideoEditor:
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         subtitle_path = output_path.with_suffix(".srt")
-        write_srt(prompt_to_segments(subtitle_text, duration), subtitle_path, 0.0, duration)
+        if subtitle_text:
+            write_srt(prompt_to_segments(subtitle_text, duration), subtitle_path, 0.0, duration)
 
         scene_duration = duration / len(image_paths)
         fps = 30
@@ -161,12 +162,10 @@ class VideoEditor:
             )
             video_labels.append(f"[v{index}]")
 
-        filters.append(
-            "".join(video_labels)
-            + f"concat=n={len(image_paths)}:v=1:a=0,"
-            + f"{subtitles_filter(subtitle_path, self.subtitle_style)},"
-            + "format=yuv420p[v]"
-        )
+        concat_filter = "".join(video_labels) + f"concat=n={len(image_paths)}:v=1:a=0,"
+        if subtitle_text:
+            concat_filter += f"{subtitles_filter(subtitle_path, self.subtitle_style)},"
+        filters.append(concat_filter + "format=yuv420p[v]")
 
         cmd.extend(
             [
@@ -211,32 +210,36 @@ class VideoEditor:
         output_path: Path,
         fallback_subtitle: str | None = None,
         low_memory: bool = False,
+        add_subtitles: bool = True,
     ) -> Path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         info = await self.probe(input_path)
         duration = max(1.0, selected.duration)
         subtitle_path = output_path.with_suffix(".srt")
 
-        if transcript:
-            write_srt(transcript, subtitle_path, offset=selected.start, duration=duration)
-        else:
-            text = fallback_subtitle or "Highlights from this video"
-            write_srt(prompt_to_segments(text, min(int(duration), 12)), subtitle_path, 0.0, duration)
+        if add_subtitles:
+            if transcript:
+                write_srt(transcript, subtitle_path, offset=selected.start, duration=duration)
+            else:
+                text = fallback_subtitle or "Highlights from this video"
+                write_srt(prompt_to_segments(text, min(int(duration), 12)), subtitle_path, 0.0, duration)
 
         if low_memory:
+            subtitle_filter = f"{subtitles_filter(subtitle_path, self.subtitle_style)}," if add_subtitles else ""
             vf = (
                 "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,"
                 "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=black,"
-                f"{subtitles_filter(subtitle_path, self.subtitle_style)},"
+                f"{subtitle_filter}"
                 "format=yuv420p[v]"
             )
         else:
+            subtitle_filter = f"{subtitles_filter(subtitle_path, self.subtitle_style)}," if add_subtitles else ""
             vf = (
                 "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,"
                 "crop=1080:1920,boxblur=luma_radius=24:luma_power=1[bg];"
                 "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg];"
                 "[bg][fg]overlay=(W-w)/2:(H-h)/2,"
-                f"{subtitles_filter(subtitle_path, self.subtitle_style)},"
+                f"{subtitle_filter}"
                 "format=yuv420p[v]"
             )
 
