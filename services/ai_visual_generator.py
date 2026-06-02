@@ -63,20 +63,20 @@ class AIPromptVisualGenerator:
         return results
 
     def _generate_content(self, client: Any, types: Any, contents: list[Any]) -> Any:
-        response_format = {"image": {"aspect_ratio": self.settings.gemini_image_aspect_ratio}}
-        if self.settings.gemini_image_size:
-            response_format["image"]["image_size"] = self.settings.gemini_image_size
-
         try:
+            image_config_kwargs = {"aspect_ratio": self.settings.gemini_image_aspect_ratio}
+            if self.settings.gemini_image_size:
+                image_config_kwargs["image_size"] = self.settings.gemini_image_size
+
             return client.models.generate_content(
                 model=self.settings.gemini_image_model,
                 contents=contents,
                 config=types.GenerateContentConfig(
                     response_modalities=["Image"],
-                    response_format=response_format,
+                    image_config=types.ImageConfig(**image_config_kwargs),
                 ),
             )
-        except TypeError:
+        except Exception:
             return client.models.generate_content(
                 model=self.settings.gemini_image_model,
                 contents=contents,
