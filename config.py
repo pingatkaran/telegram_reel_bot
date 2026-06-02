@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
-    gemini_image_model: str = Field(default="gemini-2.5-flash-image", alias="GEMINI_IMAGE_MODEL")
+    gemini_image_model: str = Field(default="imagen-4.0-generate-001", alias="GEMINI_IMAGE_MODEL")
     gemini_image_aspect_ratio: str = Field(default="9:16", alias="GEMINI_IMAGE_ASPECT_RATIO")
     gemini_image_size: str | None = Field(default=None, alias="GEMINI_IMAGE_SIZE")
     enable_ai_prompt_visuals: bool = Field(default=True, alias="ENABLE_AI_PROMPT_VISUALS")

@@ -38,6 +38,9 @@ class AIPromptVisualGenerator:
         output_dir = OUTPUTS_DIR / f"{job_id}_nano_banana"
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        if self.settings.gemini_image_model.startswith("imagen-"):
+            return self._generate_with_imagen(client, types, prompt, output_dir, target_count=count)
+
         image_input = None
         if reference_image:
             with Image.open(reference_image) as image:
@@ -60,6 +63,35 @@ class AIPromptVisualGenerator:
             image_path.write_bytes(image_bytes)
             results.append(image_path)
 
+        return results
+
+    def _generate_with_imagen(
+        self,
+        client: Any,
+        types: Any,
+        prompt: str,
+        output_dir: Path,
+        target_count: int,
+    ) -> list[Path]:
+        count = max(1, min(target_count, 4))
+        response = client.models.generate_images(
+            model=self.settings.gemini_image_model,
+            prompt=build_imagen_prompt(prompt),
+            config=types.GenerateImagesConfig(
+                number_of_images=count,
+                aspect_ratio=self.settings.gemini_image_aspect_ratio,
+                person_generation="allow_adult",
+            ),
+        )
+
+        results: list[Path] = []
+        for index, generated_image in enumerate(getattr(response, "generated_images", []) or []):
+            image_bytes = generated_image_bytes(generated_image)
+            if not image_bytes:
+                continue
+            image_path = output_dir / f"scene_{index + 1:02}.png"
+            image_path.write_bytes(image_bytes)
+            results.append(image_path)
         return results
 
     def _generate_content(self, client: Any, types: Any, contents: list[Any]) -> Any:
@@ -104,6 +136,37 @@ def build_scene_prompt(prompt: str, index: int, total: int, has_reference: bool)
         "with strong depth, natural composition, and room in the lower third for subtitles. "
         f"User prompt: {prompt}"
     )
+
+
+def build_imagen_prompt(prompt: str) -> str:
+    return (
+        "Create vertical 9:16 Instagram Reel still frames. "
+        "No subtitles, no captions, no logos, no watermark, no UI, no readable text. "
+        "Cinematic social media composition, high-quality polished visual style, "
+        "strong depth, natural lighting, and room in the lower third for subtitles. "
+        "If people appear, they must be clearly adults. "
+        f"User prompt: {prompt}"
+    )
+
+
+def generated_image_bytes(generated_image: Any) -> bytes | None:
+    image = getattr(generated_image, "image", None)
+    if image is None:
+        return None
+    image_bytes = getattr(image, "image_bytes", None)
+    if image_bytes is None:
+        image_bytes = getattr(image, "imageBytes", None)
+    if isinstance(image_bytes, bytes):
+        return image_bytes
+    if isinstance(image_bytes, str):
+        return base64.b64decode(image_bytes)
+    if hasattr(image, "save"):
+        from io import BytesIO
+
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        return buffer.getvalue()
+    return None
 
 
 def first_image_bytes(response: Any) -> bytes | None:

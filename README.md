@@ -14,7 +14,7 @@ The production path is webhook-only. You do not need to run a bot process on you
 
 Telegram message received
 -> detect input type
--> download video or generate Nano Banana prompt visuals
+-> download video or generate AI prompt visuals
 -> extract/transcribe audio with faster-whisper
 -> pick a 15-45 second segment
 -> render a 1080x1920 MP4 with FFmpeg, subtitles, and normalized audio
@@ -23,7 +23,7 @@ Telegram message received
 -> publish the public MP4 URL as an Instagram Reel
 -> send Telegram success/failure message
 
-If `GEMINI_API_KEY` is set, prompt messages use Nano Banana / Gemini image generation to create Reel visuals. If `OPENAI_API_KEY` is set, captions are AI-written. If either key is missing, the bot still has fallback behavior.
+If `GEMINI_API_KEY` is set, prompt messages use Google's image models to create Reel visuals. Imagen 4 is recommended for free-tier projects when Nano Banana quota is unavailable. If `OPENAI_API_KEY` is set, captions are AI-written. If either key is missing, the bot still has fallback behavior.
 
 ## Project Structure
 
@@ -104,7 +104,7 @@ Optional:
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
 GEMINI_API_KEY=
-GEMINI_IMAGE_MODEL=gemini-2.5-flash-image
+GEMINI_IMAGE_MODEL=imagen-4.0-generate-001
 GEMINI_IMAGE_ASPECT_RATIO=9:16
 GEMINI_IMAGE_SIZE=
 ENABLE_AI_PROMPT_VISUALS=true
@@ -132,14 +132,14 @@ PUBLIC_BASE_URL + /telegram-webhook
 
 The app sets the Telegram webhook automatically on startup when `TELEGRAM_BOT_TOKEN` and `PUBLIC_BASE_URL` are present.
 
-## Nano Banana Prompt Reels
+## AI Prompt Reels With Gemini/Imagen
 
-Prompt-only Telegram messages can use Google's Nano Banana image models through the Gemini API.
+Prompt-only Telegram messages can use Google's image generation models through the Gemini API.
 
 What happens:
 
 1. You send a text prompt, for example `Create a cinematic motivational Reel about building every day`.
-2. The bot asks Nano Banana to create several vertical 9:16 Reel still frames.
+2. The bot asks Google Imagen or Nano Banana to create several vertical 9:16 Reel still frames.
 3. FFmpeg animates those images with subtle camera movement.
 4. The bot adds subtitles, caption/hashtags, uploads the MP4 to public storage, and publishes the Reel.
 
@@ -154,13 +154,14 @@ GEMINI_API_KEY=your_google_ai_studio_api_key
 Recommended model:
 
 ```env
-GEMINI_IMAGE_MODEL=gemini-2.5-flash-image
+GEMINI_IMAGE_MODEL=imagen-4.0-generate-001
 ```
 
-Other supported Nano Banana model IDs may include `gemini-3.1-flash-image` for Nano Banana 2 and `gemini-3-pro-image` for Nano Banana Pro, depending on what your Gemini API account has access to. Google documents Nano Banana as Gemini's native image generation capability and lists these model names in the Gemini API image generation guide.
+Use Imagen 4 when your free-tier quota page shows `Imagen 4 Generate` has available RPD and Nano Banana shows `0 / 0 / 0`. Other supported Nano Banana model IDs may include `gemini-2.5-flash-image`, `gemini-3.1-flash-image`, and `gemini-3-pro-image`, depending on what your Gemini API account has access to.
 
 Official references:
 
+- [Imagen 4 generation](https://ai.google.dev/gemini-api/docs/imagen)
 - [Nano Banana / Gemini image generation](https://ai.google.dev/gemini-api/docs/image-generation)
 - [Google AI Studio API keys](https://aistudio.google.com/app/apikey)
 
@@ -537,4 +538,4 @@ The local webhook will not work unless you expose it through a public HTTPS URL.
 - Instagram token errors: check token scopes, expiry, app mode, Page link, and `INSTAGRAM_USER_ID`.
 - Render/Railway free tier runs out of memory: set `LOW_MEMORY_MODE=true`, `ENABLE_TRANSCRIPTION=false`, `MAX_DOWNLOAD_MB=150`, then redeploy. For Whisper transcription, use a host with at least 1-2 GB RAM.
 - YouTube downloads fail: the video may block cloud datacenter downloads or require cookies. Upload the video directly, send a direct MP4 URL, or configure `YOUTUBE_COOKIES_FILE`.
-- Prompt-only Reel looks simple: add `GEMINI_API_KEY` to enable Nano Banana prompt visuals. Without that key, the bot falls back to a simple text Reel.
+- Prompt-only Reel looks simple: add `GEMINI_API_KEY` and set `GEMINI_IMAGE_MODEL=imagen-4.0-generate-001` to enable AI prompt visuals. Without image quota, the bot falls back to a simple text Reel.
