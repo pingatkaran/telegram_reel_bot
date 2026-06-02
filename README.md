@@ -23,7 +23,7 @@ Telegram message received
 -> publish the public MP4 URL as an Instagram Reel
 -> send Telegram success/failure message
 
-If `GEMINI_API_KEY` is set, prompt messages use Google's image models to create Reel visuals. Imagen 4 is recommended for free-tier projects when Nano Banana quota is unavailable. If `OPENAI_API_KEY` is set, captions are AI-written. If either key is missing, the bot still has fallback behavior.
+If `IMAGE_PROVIDER=pollinations`, prompt messages use Pollinations image generation for free/community-friendly prompt visuals. Gemini/Imagen remains supported when you have Google image quota. If `OPENAI_API_KEY` is set, captions are AI-written. If image generation is unavailable, the bot still falls back to a simple text Reel.
 
 ## Project Structure
 
@@ -103,6 +103,10 @@ Optional:
 ```env
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
+IMAGE_PROVIDER=pollinations
+POLLINATIONS_API_KEY=
+POLLINATIONS_MODEL=flux
+POLLINATIONS_BASE_URL=https://gen.pollinations.ai
 GEMINI_API_KEY=
 GEMINI_IMAGE_MODEL=imagen-4.0-generate-001
 GEMINI_IMAGE_ASPECT_RATIO=9:16
@@ -132,28 +136,39 @@ PUBLIC_BASE_URL + /telegram-webhook
 
 The app sets the Telegram webhook automatically on startup when `TELEGRAM_BOT_TOKEN` and `PUBLIC_BASE_URL` are present.
 
-## AI Prompt Reels With Gemini/Imagen
+## AI Prompt Reels With Pollinations Or Gemini
 
-Prompt-only Telegram messages can use Google's image generation models through the Gemini API.
+Prompt-only Telegram messages can use Pollinations or Google's image generation models.
 
 What happens:
 
 1. You send a text prompt, for example `Create a cinematic motivational Reel about building every day`.
-2. The bot asks Google Imagen or Nano Banana to create several vertical 9:16 Reel still frames.
+2. The bot asks Pollinations, Google Imagen, or Nano Banana to create several vertical 9:16 Reel still frames.
 3. FFmpeg animates those images with subtle camera movement.
 4. The bot adds subtitles, caption/hashtags, uploads the MP4 to public storage, and publishes the Reel.
 
 You can also send a photo with a caption. The bot uses the photo as a visual reference and the caption as the prompt.
 
-Add this Hugging Face/Render/Railway variable:
+Recommended free/community setup:
 
 ```env
-GEMINI_API_KEY=your_google_ai_studio_api_key
+IMAGE_PROVIDER=pollinations
+POLLINATIONS_API_KEY=your_pollinations_key
+POLLINATIONS_MODEL=flux
+POLLINATIONS_BASE_URL=https://gen.pollinations.ai
 ```
 
-Recommended model:
+Pollinations docs show the image API as:
+
+```text
+https://gen.pollinations.ai/image/your-prompt?model=flux&width=1024&height=1024&seed=0&enhance=false&key=YOUR_API_KEY
+```
+
+Google setup, only if you have image quota:
 
 ```env
+IMAGE_PROVIDER=gemini
+GEMINI_API_KEY=your_google_ai_studio_api_key
 GEMINI_IMAGE_MODEL=imagen-4.0-generate-001
 ```
 
@@ -161,6 +176,7 @@ Use Imagen 4 when your free-tier quota page shows `Imagen 4 Generate` has availa
 
 Official references:
 
+- [Pollinations API docs](https://pollinations.ai/docs)
 - [Imagen 4 generation](https://ai.google.dev/gemini-api/docs/imagen)
 - [Nano Banana / Gemini image generation](https://ai.google.dev/gemini-api/docs/image-generation)
 - [Google AI Studio API keys](https://aistudio.google.com/app/apikey)
@@ -538,4 +554,4 @@ The local webhook will not work unless you expose it through a public HTTPS URL.
 - Instagram token errors: check token scopes, expiry, app mode, Page link, and `INSTAGRAM_USER_ID`.
 - Render/Railway free tier runs out of memory: set `LOW_MEMORY_MODE=true`, `ENABLE_TRANSCRIPTION=false`, `MAX_DOWNLOAD_MB=150`, then redeploy. For Whisper transcription, use a host with at least 1-2 GB RAM.
 - YouTube downloads fail: the video may block cloud datacenter downloads or require cookies. Upload the video directly, send a direct MP4 URL, or configure `YOUTUBE_COOKIES_FILE`.
-- Prompt-only Reel looks simple: add `GEMINI_API_KEY` and set `GEMINI_IMAGE_MODEL=imagen-4.0-generate-001` to enable AI prompt visuals. Without image quota, the bot falls back to a simple text Reel.
+- Prompt-only Reel looks simple: set `IMAGE_PROVIDER=pollinations` and add `POLLINATIONS_API_KEY` to enable free/community AI prompt visuals. Without image access, the bot falls back to a simple text Reel.

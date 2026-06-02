@@ -48,10 +48,14 @@ class Settings(BaseSettings):
 
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
+    image_provider: Literal["auto", "gemini", "pollinations"] = Field(default="auto", alias="IMAGE_PROVIDER")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
     gemini_image_model: str = Field(default="imagen-4.0-generate-001", alias="GEMINI_IMAGE_MODEL")
     gemini_image_aspect_ratio: str = Field(default="9:16", alias="GEMINI_IMAGE_ASPECT_RATIO")
     gemini_image_size: str | None = Field(default=None, alias="GEMINI_IMAGE_SIZE")
+    pollinations_api_key: str | None = Field(default=None, alias="POLLINATIONS_API_KEY")
+    pollinations_model: str = Field(default="flux", alias="POLLINATIONS_MODEL")
+    pollinations_base_url: str = Field(default="https://gen.pollinations.ai", alias="POLLINATIONS_BASE_URL")
     enable_ai_prompt_visuals: bool = Field(default=True, alias="ENABLE_AI_PROMPT_VISUALS")
     public_base_url: str | None = Field(default=None, alias="PUBLIC_BASE_URL")
 
