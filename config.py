@@ -48,6 +48,11 @@ class Settings(BaseSettings):
 
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
+    gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
+    gemini_image_model: str = Field(default="gemini-2.5-flash-image", alias="GEMINI_IMAGE_MODEL")
+    gemini_image_aspect_ratio: str = Field(default="9:16", alias="GEMINI_IMAGE_ASPECT_RATIO")
+    gemini_image_size: str | None = Field(default=None, alias="GEMINI_IMAGE_SIZE")
+    enable_ai_prompt_visuals: bool = Field(default=True, alias="ENABLE_AI_PROMPT_VISUALS")
     public_base_url: str | None = Field(default=None, alias="PUBLIC_BASE_URL")
 
     database_url: str = Field(default=f"sqlite:///{DATA_DIR / 'bot.db'}", alias="DATABASE_URL")
@@ -59,6 +64,7 @@ class Settings(BaseSettings):
     min_reel_seconds: int = Field(default=15, alias="MIN_REEL_SECONDS")
     max_reel_seconds: int = Field(default=45, alias="MAX_REEL_SECONDS")
     prompt_reel_seconds: int = Field(default=25, alias="PROMPT_REEL_SECONDS")
+    prompt_visual_count: int = Field(default=3, alias="PROMPT_VISUAL_COUNT")
     max_download_mb: int = Field(default=500, alias="MAX_DOWNLOAD_MB")
     max_concurrent_jobs: int = Field(default=1, alias="MAX_CONCURRENT_JOBS")
     webhook_path: str = Field(default="/telegram-webhook", alias="TELEGRAM_WEBHOOK_PATH")

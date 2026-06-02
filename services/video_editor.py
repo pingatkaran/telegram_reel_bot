@@ -118,6 +118,91 @@ class VideoEditor:
         await self._run(cmd)
         return output_path
 
+    async def create_image_reel(
+        self,
+        image_paths: list[Path],
+        output_path: Path,
+        duration: int,
+        subtitle_text: str,
+        low_memory: bool = False,
+    ) -> Path:
+        if not image_paths:
+            raise RuntimeError("No AI images were generated for the prompt Reel")
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        subtitle_path = output_path.with_suffix(".srt")
+        write_srt(prompt_to_segments(subtitle_text, duration), subtitle_path, 0.0, duration)
+
+        scene_duration = duration / len(image_paths)
+        fps = 30
+        scene_frames = max(1, int(round(scene_duration * fps)))
+        cmd = ["ffmpeg", "-y"]
+        for image_path in image_paths:
+            cmd.extend(["-loop", "1", "-t", f"{scene_duration:.3f}", "-i", str(image_path)])
+        cmd.extend(["-f", "lavfi", "-t", str(duration), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"])
+
+        if low_memory:
+            cmd.extend(["-threads", "1", "-filter_threads", "1", "-filter_complex_threads", "1"])
+
+        filters: list[str] = []
+        video_labels: list[str] = []
+        for index, _image_path in enumerate(image_paths):
+            zoom_speed = "0.0010" if low_memory else "0.0016"
+            filters.append(
+                f"[{index}:v]"
+                "scale=1080:1920:force_original_aspect_ratio=increase,"
+                "crop=1080:1920,"
+                f"zoompan=z='min(1.10,1+on*{zoom_speed})':"
+                "x='iw/2-iw/(2*zoom)':"
+                "y='ih/2-ih/(2*zoom)':"
+                f"d={scene_frames}:fps={fps}:s=1080x1920,"
+                "setpts=PTS-STARTPTS"
+                f"[v{index}]"
+            )
+            video_labels.append(f"[v{index}]")
+
+        filters.append(
+            "".join(video_labels)
+            + f"concat=n={len(image_paths)}:v=1:a=0,"
+            + f"{subtitles_filter(subtitle_path, self.subtitle_style)},"
+            + "format=yuv420p[v]"
+        )
+
+        cmd.extend(
+            [
+                "-filter_complex",
+                ";".join(filters),
+                "-map",
+                "[v]",
+                "-map",
+                f"{len(image_paths)}:a",
+                "-t",
+                str(duration),
+                "-r",
+                str(fps),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast" if low_memory else "veryfast",
+                "-profile:v",
+                "high",
+                "-level",
+                "4.1",
+                "-b:v",
+                "3000k" if low_memory else "4500k",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                "-movflags",
+                "+faststart",
+                "-shortest",
+                str(output_path),
+            ]
+        )
+        await self._run(cmd)
+        return output_path
+
     async def create_vertical_reel(
         self,
         input_path: Path,

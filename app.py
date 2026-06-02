@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Request
 
 from config import DOWNLOADS_DIR, OUTPUTS_DIR, Settings, ensure_directories, get_settings
 from services.caption_generator import CaptionGenerator
+from services.ai_visual_generator import AIPromptVisualGenerator
 from services.database import Database
 from services.downloader import Downloader, first_url
 from services.instagram_uploader import InstagramUploader
@@ -35,6 +36,7 @@ video_editor = VideoEditor()
 transcriber = Transcriber(settings)
 scene_selector = SceneSelector(settings.min_reel_seconds, settings.max_reel_seconds)
 caption_generator = CaptionGenerator(settings)
+visual_generator = AIPromptVisualGenerator(settings)
 job_semaphore = asyncio.Semaphore(settings.max_concurrent_jobs)
 
 
@@ -245,10 +247,43 @@ async def prepare_source(
     if payload.input_type == "prompt" and payload.text:
         prompt_video_path = OUTPUTS_DIR / f"{job_id}_prompt.mp4"
         duration = max(settings.min_reel_seconds, min(settings.prompt_reel_seconds, settings.max_reel_seconds))
+        reference_image_path = await download_reference_image(job_id, payload)
+        if settings.gemini_api_key and settings.enable_ai_prompt_visuals:
+            image_paths = await visual_generator.generate_prompt_images(
+                payload.text,
+                job_id,
+                settings.prompt_visual_count,
+                reference_image=reference_image_path,
+            )
+            if not image_paths:
+                raise RuntimeError(
+                    "Nano Banana did not return any images. Check GEMINI_API_KEY and GEMINI_IMAGE_MODEL."
+                )
+            await video_editor.create_image_reel(
+                image_paths,
+                prompt_video_path,
+                duration,
+                payload.text,
+                low_memory=settings.low_memory_mode,
+            )
+            return prompt_video_path, payload.text, "prompt", prompt_to_segments(payload.text, duration)
+
         await video_editor.create_prompt_video(payload.text, prompt_video_path, duration)
         return prompt_video_path, payload.text, "prompt", prompt_to_segments(payload.text, duration)
 
     raise RuntimeError("Unsupported input")
+
+
+async def download_reference_image(job_id: int, payload: "InputPayload") -> Path | None:
+    if not payload.reference_file_id:
+        return None
+    file_info = await telegram.get_file(payload.reference_file_id)
+    file_path = file_info.get("file_path")
+    if not file_path:
+        raise RuntimeError("Telegram did not return a downloadable image path")
+    suffix = Path(payload.reference_file_name or file_path).suffix or ".jpg"
+    destination = DOWNLOADS_DIR / f"{job_id}_reference{suffix}"
+    return await telegram.download_file(file_path, destination)
 
 
 @dataclass(slots=True)
@@ -259,6 +294,8 @@ class InputPayload:
     url: str | None = None
     file_id: str | None = None
     file_name: str | None = None
+    reference_file_id: str | None = None
+    reference_file_name: str | None = None
     command: str | None = None
 
 
@@ -274,6 +311,18 @@ def parse_telegram_update(update: dict[str, Any]) -> tuple[int, InputPayload] | 
     text = message.get("text") or message.get("caption") or ""
     if text.strip().startswith("/start"):
         return int(chat_id), InputPayload(input_type="command", command="start")
+
+    photos = message.get("photo") or []
+    if photos:
+        largest_photo = photos[-1]
+        prompt = text.strip() or "Create a cinematic Instagram Reel based on this image."
+        return int(chat_id), InputPayload(
+            input_type="prompt",
+            source_label=prompt[:120],
+            text=prompt,
+            reference_file_id=largest_photo.get("file_id"),
+            reference_file_name="telegram-reference.jpg",
+        )
 
     video = message.get("video")
     if video and video.get("file_id"):
@@ -322,6 +371,7 @@ def welcome_message() -> str:
     return (
         "Send me one of these:\n"
         "- a prompt\n"
+        "- a photo with a prompt caption\n"
         "- a YouTube URL\n"
         "- a direct video URL\n"
         "- an uploaded video\n\n"

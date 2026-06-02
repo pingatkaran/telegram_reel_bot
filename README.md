@@ -6,7 +6,7 @@ app_port: 7860
 
 # Telegram to Instagram Reel Bot
 
-Cloud-deployable Telegram bot that turns a Telegram prompt, YouTube URL, direct video URL, or uploaded video into a vertical Instagram Reel and publishes it through the official Instagram Graph API.
+Cloud-deployable Telegram bot that turns a Telegram prompt, photo prompt, YouTube URL, direct video URL, or uploaded video into a vertical Instagram Reel and publishes it through the official Instagram Graph API.
 
 The production path is webhook-only. You do not need to run a bot process on your local machine.
 
@@ -14,7 +14,7 @@ The production path is webhook-only. You do not need to run a bot process on you
 
 Telegram message received
 -> detect input type
--> download or generate source video
+-> download video or generate Nano Banana prompt visuals
 -> extract/transcribe audio with faster-whisper
 -> pick a 15-45 second segment
 -> render a 1080x1920 MP4 with FFmpeg, subtitles, and normalized audio
@@ -23,7 +23,7 @@ Telegram message received
 -> publish the public MP4 URL as an Instagram Reel
 -> send Telegram success/failure message
 
-If `OPENAI_API_KEY` is not set, the bot still works. It uses transcript text, template captions, and rule-based hashtags.
+If `GEMINI_API_KEY` is set, prompt messages use Nano Banana / Gemini image generation to create Reel visuals. If `OPENAI_API_KEY` is set, captions are AI-written. If either key is missing, the bot still has fallback behavior.
 
 ## Project Structure
 
@@ -45,6 +45,7 @@ telegram_reel_bot/
     transcriber.py
     scene_selector.py
     caption_generator.py
+    ai_visual_generator.py
     instagram_uploader.py
     storage.py
     database.py
@@ -102,6 +103,11 @@ Optional:
 ```env
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
+GEMINI_API_KEY=
+GEMINI_IMAGE_MODEL=gemini-2.5-flash-image
+GEMINI_IMAGE_ASPECT_RATIO=9:16
+GEMINI_IMAGE_SIZE=
+ENABLE_AI_PROMPT_VISUALS=true
 TELEGRAM_WEBHOOK_SECRET=
 GRAPH_API_VERSION=v24.0
 INSTAGRAM_API_HOST=auto
@@ -111,6 +117,7 @@ LOW_MEMORY_MODE=false
 MIN_REEL_SECONDS=15
 MAX_REEL_SECONDS=45
 PROMPT_REEL_SECONDS=25
+PROMPT_VISUAL_COUNT=3
 MAX_DOWNLOAD_MB=500
 MAX_CONCURRENT_JOBS=1
 YOUTUBE_COOKIES_FILE=
@@ -124,6 +131,38 @@ PUBLIC_BASE_URL + /telegram-webhook
 ```
 
 The app sets the Telegram webhook automatically on startup when `TELEGRAM_BOT_TOKEN` and `PUBLIC_BASE_URL` are present.
+
+## Nano Banana Prompt Reels
+
+Prompt-only Telegram messages can use Google's Nano Banana image models through the Gemini API.
+
+What happens:
+
+1. You send a text prompt, for example `Create a cinematic motivational Reel about building every day`.
+2. The bot asks Nano Banana to create several vertical 9:16 Reel still frames.
+3. FFmpeg animates those images with subtle camera movement.
+4. The bot adds subtitles, caption/hashtags, uploads the MP4 to public storage, and publishes the Reel.
+
+You can also send a photo with a caption. The bot uses the photo as a visual reference and the caption as the prompt.
+
+Add this Hugging Face/Render/Railway variable:
+
+```env
+GEMINI_API_KEY=your_google_ai_studio_api_key
+```
+
+Recommended model:
+
+```env
+GEMINI_IMAGE_MODEL=gemini-2.5-flash-image
+```
+
+Other supported Nano Banana model IDs may include `gemini-3.1-flash-image` for Nano Banana 2 and `gemini-3-pro-image` for Nano Banana Pro, depending on what your Gemini API account has access to. Google documents Nano Banana as Gemini's native image generation capability and lists these model names in the Gemini API image generation guide.
+
+Official references:
+
+- [Nano Banana / Gemini image generation](https://ai.google.dev/gemini-api/docs/image-generation)
+- [Google AI Studio API keys](https://aistudio.google.com/app/apikey)
 
 ## 1. Create The Telegram Bot
 
@@ -498,4 +537,4 @@ The local webhook will not work unless you expose it through a public HTTPS URL.
 - Instagram token errors: check token scopes, expiry, app mode, Page link, and `INSTAGRAM_USER_ID`.
 - Render/Railway free tier runs out of memory: set `LOW_MEMORY_MODE=true`, `ENABLE_TRANSCRIPTION=false`, `MAX_DOWNLOAD_MB=150`, then redeploy. For Whisper transcription, use a host with at least 1-2 GB RAM.
 - YouTube downloads fail: the video may block cloud datacenter downloads or require cookies. Upload the video directly, send a direct MP4 URL, or configure `YOUTUBE_COOKIES_FILE`.
-- Prompt-only Reel looks simple: this starter creates a clean text Reel with silent audio and generated captions; it does not generate AI video footage.
+- Prompt-only Reel looks simple: add `GEMINI_API_KEY` to enable Nano Banana prompt visuals. Without that key, the bot falls back to a simple text Reel.
