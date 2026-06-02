@@ -249,24 +249,25 @@ async def prepare_source(
         duration = max(settings.min_reel_seconds, min(settings.prompt_reel_seconds, settings.max_reel_seconds))
         reference_image_path = await download_reference_image(job_id, payload)
         if settings.gemini_api_key and settings.enable_ai_prompt_visuals:
-            image_paths = await visual_generator.generate_prompt_images(
-                payload.text,
-                job_id,
-                settings.prompt_visual_count,
-                reference_image=reference_image_path,
-            )
-            if not image_paths:
-                raise RuntimeError(
-                    "Nano Banana did not return any images. Check GEMINI_API_KEY and GEMINI_IMAGE_MODEL."
+            try:
+                image_paths = await visual_generator.generate_prompt_images(
+                    payload.text,
+                    job_id,
+                    settings.prompt_visual_count,
+                    reference_image=reference_image_path,
                 )
-            await video_editor.create_image_reel(
-                image_paths,
-                prompt_video_path,
-                duration,
-                payload.text,
-                low_memory=settings.low_memory_mode,
-            )
-            return prompt_video_path, payload.text, "prompt", prompt_to_segments(payload.text, duration)
+                if image_paths:
+                    await video_editor.create_image_reel(
+                        image_paths,
+                        prompt_video_path,
+                        duration,
+                        payload.text,
+                        low_memory=settings.low_memory_mode,
+                    )
+                    return prompt_video_path, payload.text, "prompt", prompt_to_segments(payload.text, duration)
+                logger.warning("Nano Banana did not return images for job %s; using text fallback", job_id)
+            except Exception:
+                logger.exception("Nano Banana prompt visuals failed for job %s; using text fallback", job_id)
 
         await video_editor.create_prompt_video(payload.text, prompt_video_path, duration)
         return prompt_video_path, payload.text, "prompt", prompt_to_segments(payload.text, duration)

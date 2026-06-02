@@ -67,21 +67,18 @@ class AIPromptVisualGenerator:
             image_config_kwargs = {"aspect_ratio": self.settings.gemini_image_aspect_ratio}
             if self.settings.gemini_image_size:
                 image_config_kwargs["image_size"] = self.settings.gemini_image_size
-
-            return client.models.generate_content(
-                model=self.settings.gemini_image_model,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    response_modalities=["Image"],
-                    image_config=types.ImageConfig(**image_config_kwargs),
-                ),
+            config = types.GenerateContentConfig(
+                response_modalities=["Image"],
+                image_config=types.ImageConfig(**image_config_kwargs),
             )
         except Exception:
-            return client.models.generate_content(
-                model=self.settings.gemini_image_model,
-                contents=contents,
-                config=types.GenerateContentConfig(response_modalities=["Image"]),
-            )
+            config = types.GenerateContentConfig(response_modalities=["Image"])
+
+        return client.models.generate_content(
+            model=self.settings.gemini_image_model,
+            contents=contents,
+            config=config,
+        )
 
 
 def build_scene_prompt(prompt: str, index: int, total: int, has_reference: bool) -> str:
